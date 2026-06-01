@@ -1,0 +1,634 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Auth (better-auth) ────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  firstName     String
+  lastName      String
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  passkeys    Passkey[]
+  sessions    Session[]
+  memberships Member[]
+  invitations Invitation[] @relation("InvitationInviter")
+
+  @@map("user")
+}
+
+model Account {
+  id                    String    @id
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  password              String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("account")
+}
+
+model Session {
+  id                   String   @id @default(cuid())
+  userId               String
+  token                String   @unique
+  ipAddress            String?
+  userAgent            String?
+  expiresAt            DateTime
+  activeOrganizationId String?
+  activeTeamId         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+}
+
+model Passkey {
+  id           String    @id
+  name         String?
+  publicKey    String
+  userId       String
+  credentialID String    @unique
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime? @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("passkey")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logo      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  members      Member[]
+  invitations  Invitation[]
+  storefronts  Storefront[]
+  subscription Subscription?
+
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String
+  createdAt      DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  email          String
+  inviterId      String
+  organizationId String
+  role           String?
+  status         String
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime
+  inviter        User         @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([organizationId])
+  @@map("invitation")
+}
+
+// ─── Platform Billing (BizFoo's own SaaS subscription) ─────────
+
+model Subscription {
+  id                   String       @id @default(cuid())
+  organizationId       String       @unique
+  plan                 String
+  status               String
+  priceId              String?
+  stripeCustomerId     String       @unique
+  stripeSubscriptionId String       @unique
+  currentPeriodStart   DateTime     @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stripeCustomerId])
+}
+
+// ─── Storefronts (multi-tenant catalogs) ───────────────────────
+
+model Storefront {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  slug            String   @unique
+  description     String?
+  publicKey       String   @unique @default(cuid())
+  secretKey       String   @default(cuid())
+  successUrl      String?
+  cancelUrl       String?
+  currency        String   @default("usd")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  products  Product[]
+  customers Customer[]
+  orders    Order[]
+
+  @@index([organizationId])
+}
+
+model Product {
+  id               String   @id @default(cuid())
+  storefrontId     String
+  slug             String
+  name             String
+  tagline          String?
+  description      String?
+  longDescription  String?
+  category         String?
+  badge            String?
+  imageUrl         String?
+  stack            String[] @default([])
+  relatedSlugs     String[] @default([])
+  codeSampleLang   String?
+  codeSampleFile   String?
+  codeSampleCode   String?
+  repoUrl          String?
+  demoUrl          String?
+  active           Boolean  @default(true)
+  stripeProductId  String?  @unique
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  storefront       Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  prices       Price[]
+  orders       OrderItem[]
+  deliverables Deliverable[]
+  buildPlan    BuildPlan?
+  setupSteps   SetupStep[]
+  features     ProductFeature[]
+  integrations ProductIntegration[]
+  assets       ProductAsset[]
+  howItWorks   ProductHowStep[]
+  faqs         ProductFaq[]
+  highlights   ProductHighlightStat[]
+  dependencies ProductDependency[]
+
+  @@unique([storefrontId, slug])
+  @@index([storefrontId])
+}
+
+// ─── Storefront content (the marketing-facing extras for each product) ──
+
+model ProductFeature {
+  id        String  @id @default(cuid())
+  productId String
+  icon      String?
+  title     String
+  desc      String
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductIntegration {
+  id        String  @id @default(cuid())
+  productId String
+  name      String
+  purpose   String
+  required  Boolean @default(false)
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductAsset {
+  id        String  @id @default(cuid())
+  productId String
+  label     String
+  detail    String
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductHowStep {
+  id        String  @id @default(cuid())
+  productId String
+  title     String
+  desc      String
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductFaq {
+  id        String  @id @default(cuid())
+  productId String
+  question  String
+  answer    String
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model ProductHighlightStat {
+  id        String  @id @default(cuid())
+  productId String
+  value     String
+  label     String
+  position  Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+// Tech stack + launch-time dependencies. Shown on the product page so
+// buyers know what they'll need to run the thing (framework, services,
+// paid accounts, native toolchains).
+model ProductDependency {
+  id          String  @id @default(cuid())
+  productId   String
+  name        String  // e.g. "Next.js", "Postgres", "Stripe account"
+  purpose     String? // Short "why this is here"
+  version     String? // e.g. "^16.0.0" (optional)
+  category    String? // "framework" | "library" | "service" | "tooling" | "runtime"
+  required    Boolean @default(true)
+  homepageUrl String?
+  position    Int     @default(0)
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+// ─── Build plans (the spec + roadmap behind each product) ──────
+
+enum BuildStage {
+  IDEA
+  SPEC
+  SCAFFOLDED
+  IN_DEV
+  ALPHA
+  BETA
+  RELEASED
+}
+
+model BuildPlan {
+  id          String     @id @default(cuid())
+  productId   String     @unique
+  stage       BuildStage @default(IDEA)
+  problem     String?
+  audience    String?
+  outcome     String?
+  scope       String?
+  outOfScope  String?
+  techNotes   String?
+  repoUrl     String?
+  scaffoldedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  product     Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  milestones Milestone[]
+
+  @@index([productId])
+}
+
+enum MilestoneStatus {
+  TODO
+  DOING
+  DONE
+  BLOCKED
+}
+
+model Milestone {
+  id            String          @id @default(cuid())
+  buildPlanId   String
+  parentId      String?
+  title         String
+  description   String?
+  status        MilestoneStatus @default(TODO)
+  position      Int             @default(0)
+  estimateHours Int?
+  doneAt        DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  buildPlan     BuildPlan       @relation(fields: [buildPlanId], references: [id], onDelete: Cascade)
+  parent        Milestone?      @relation("MilestoneTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children      Milestone[]     @relation("MilestoneTree")
+
+  @@index([buildPlanId])
+  @@index([parentId])
+}
+
+// ─── Deliverables (what a buyer actually receives) ──────────────
+
+enum DeliverableType {
+  REPO
+  FILE
+  DOC
+  VIDEO
+  LINK
+}
+
+enum DeliverableStatus {
+  DRAFT
+  IN_PROGRESS
+  READY
+  ARCHIVED
+}
+
+enum DeliverableAccess {
+  PUBLIC
+  BUYERS_ONLY
+  ADMIN_ONLY
+}
+
+model Deliverable {
+  id          String              @id @default(cuid())
+  productId   String
+  title       String
+  slug        String
+  type        DeliverableType     @default(REPO)
+  status      DeliverableStatus   @default(DRAFT)
+  access      DeliverableAccess   @default(BUYERS_ONLY)
+  url         String?
+  notes       String?
+  versionTag  String?
+  position    Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  product     Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  changelog   DeliverableNote[]
+  delivery    DeliveryConfig?
+  grants      DeliveryGrant[]
+
+  @@unique([productId, slug])
+  @@index([productId])
+}
+
+// ─── Delivery (how a buyer actually gets the asset) ─────────────
+
+enum DeliveryMethod {
+  EMAIL_LINK        // bizfoo emails a time-limited download URL on purchase
+  GITHUB_INVITE     // bizfoo invites the buyer's GitHub user to a private repo
+  DIRECT_DOWNLOAD   // SummonIQ-hosted download page; bizfoo issues the URL behind tenant auth
+  EXTERNAL_LINK     // Just point at an external URL (e.g. Notion, Figma)
+}
+
+model DeliveryConfig {
+  id              String         @id @default(cuid())
+  deliverableId   String         @unique
+  method          DeliveryMethod
+  // EMAIL_LINK / DIRECT_DOWNLOAD: the underlying asset URL (e.g. Vercel Blob)
+  assetUrl        String?
+  // EMAIL_LINK / DIRECT_DOWNLOAD: minutes the issued link stays valid (0 = no expiry)
+  ttlMinutes      Int            @default(1440)
+  // EMAIL_LINK / DIRECT_DOWNLOAD: max number of times a single grant can be redeemed (null = unlimited)
+  maxRedeems      Int?
+  // GITHUB_INVITE specifics
+  repoOwner       String?
+  repoName        String?
+  // EXTERNAL_LINK: the URL handed back as-is
+  externalUrl     String?
+  // Optional copy that ships in the delivery email / success screen
+  emailSubject    String?
+  emailBody       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deliverable     Deliverable    @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+}
+
+enum GrantStatus {
+  PENDING        // created, not yet redeemed
+  ACTIVE         // redeemable
+  REDEEMED       // fully consumed (single-use)
+  EXPIRED
+  REVOKED
+}
+
+model DeliveryGrant {
+  id            String        @id @default(cuid())
+  token         String        @unique @default(cuid()) // public, used in URLs
+  orderId       String
+  deliverableId String
+  email         String                                 // recipient
+  githubLogin   String?                                // captured when redeeming GH invites
+  status        GrantStatus   @default(PENDING)
+  expiresAt     DateTime?
+  redeemedAt    DateTime?
+  redeemCount   Int           @default(0)
+  maxRedeems    Int?
+  metadata      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliverable   Deliverable   @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([deliverableId])
+  @@index([email])
+}
+
+model DeliverableNote {
+  id            String      @id @default(cuid())
+  deliverableId String
+  versionTag    String?
+  body          String
+  createdAt     DateTime    @default(now())
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+
+  @@index([deliverableId])
+}
+
+model Price {
+  id              String      @id @default(cuid())
+  productId       String
+  nickname        String?
+  amount          Int
+  currency        String      @default("usd")
+  interval        PriceInterval @default(ONE_TIME)
+  intervalCount   Int         @default(1)
+  active          Boolean     @default(true)
+  stripePriceId   String?     @unique
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  product         Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  orderItems OrderItem[]
+
+  @@index([productId])
+}
+
+enum PriceInterval {
+  ONE_TIME
+  MONTH
+  YEAR
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  storefrontId     String
+  email            String
+  name             String?
+  stripeCustomerId String?  @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  storefront       Storefront @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+
+  orders Order[]
+
+  @@unique([storefrontId, email])
+  @@index([storefrontId])
+}
+
+model Order {
+  id                      String      @id @default(cuid())
+  storefrontId            String
+  customerId              String?
+  email                   String
+  status                  OrderStatus @default(PENDING)
+  amountTotal             Int         @default(0)
+  currency                String      @default("usd")
+  stripeCheckoutSessionId String?     @unique
+  stripePaymentIntentId   String?     @unique
+  metadata                Json?
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+  storefront              Storefront  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  customer                Customer?   @relation(fields: [customerId], references: [id])
+
+  items  OrderItem[]
+  grants DeliveryGrant[]
+
+  @@index([storefrontId])
+  @@index([customerId])
+  @@index([email])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  productId String
+  priceId   String
+  quantity  Int     @default(1)
+  amount    Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
+  price     Price   @relation(fields: [priceId], references: [id])
+
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  REFUNDED
+  CANCELED
+  FAILED
+}
+
+// ─── Setup guide (post-purchase configuration the buyer fills in) ──
+
+enum SetupInputType {
+  TEXT
+  SECRET
+  URL
+  EMAIL
+  COLOR
+  BOOLEAN
+  CHOICE
+  FILE
+  INTEGRATION
+}
+
+model SetupStep {
+  id           String       @id @default(cuid())
+  productId    String
+  title        String
+  description  String?
+  category     String?      // e.g. "Branding", "Integrations", "Content"
+  position     Int          @default(0)
+  required     Boolean      @default(true)
+  helpUrl      String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  inputs       SetupInput[]
+
+  @@index([productId])
+}
+
+model SetupInput {
+  id           String         @id @default(cuid())
+  setupStepId  String
+  key          String         // e.g. STRIPE_PUBLISHABLE_KEY or brand.primaryColor
+  label        String
+  description  String?
+  inputType    SetupInputType @default(TEXT)
+  placeholder  String?
+  helpUrl      String?
+  required     Boolean        @default(true)
+  validation   String?        // optional regex
+  choices      String[]       @default([]) // for CHOICE type
+  position     Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  setupStep    SetupStep      @relation(fields: [setupStepId], references: [id], onDelete: Cascade)
+
+  @@index([setupStepId])
+}
