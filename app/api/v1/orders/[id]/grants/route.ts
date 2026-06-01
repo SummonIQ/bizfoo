@@ -16,7 +16,10 @@ export async function GET(
   // Public-key auth — must match the storefront the order belongs to.
   const storefront = await getStorefrontByPublicKey(req);
   if (!storefront) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers },
+    );
   }
 
   const order = await db.order.findFirst({
@@ -48,7 +51,15 @@ export async function GET(
         status: g.status,
         method: g.deliverable.delivery?.method ?? "EXTERNAL_LINK",
         product: g.deliverable.product,
-        deliverable: { title: g.deliverable.title, type: g.deliverable.type },
+        deliverable: {
+          title: g.deliverable.title,
+          slug: g.deliverable.slug,
+          type: g.deliverable.type,
+        },
+        url:
+          g.deliverable.delivery?.method === "EXTERNAL_LINK"
+            ? g.deliverable.delivery.externalUrl
+            : null,
         expiresAt: g.expiresAt?.toISOString() ?? null,
       })),
     },

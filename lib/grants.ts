@@ -5,7 +5,10 @@
 import { db } from "@/lib/db/client";
 import { sendEmail, grantEmailHtml } from "@/lib/email";
 import { signedDownloadUrl } from "@/lib/blob";
-import { getGuideGrantDownloadUrl, syncGuideProductArtifacts } from "@/lib/guide-documents";
+import {
+  getGuideGrantDownloadUrl,
+  syncGuideProductArtifacts,
+} from "@/lib/guide-documents";
 import { ghInviteCollaborator } from "@/lib/github";
 import { getProductDisplayInfo, getProductGuide } from "@/lib/product-guides";
 import type { DeliveryMethod, GrantStatus } from "../generated/prisma/client";
@@ -99,12 +102,18 @@ export async function issueGrantsForOrder(orderId: string) {
   const created: Awaited<ReturnType<typeof issueGrant>>[] = [];
   for (const item of order.items) {
     const guide = getProductGuide(item.product);
-    const deliverables = guide
+    const guideDeliverable = guide
+      ? await syncGuideProductArtifacts({
+          productId: item.product.id,
+          guide,
+        })
+      : null;
+    const deliverables = guideDeliverable
       ? [
-          await syncGuideProductArtifacts({
-            productId: item.product.id,
-            guide,
-          }),
+          guideDeliverable,
+          ...item.product.deliverables.filter(
+            (d) => d.status !== "ARCHIVED" && d.id !== guideDeliverable.id,
+          ),
         ]
       : item.product.deliverables;
 
@@ -144,10 +153,11 @@ export type SetupStepPayload = {
 
 export type GrantPayload = {
   token: string;
+  email: string;
   status: GrantStatus;
   method: DeliveryMethod;
   product: { name: string; slug: string };
-  deliverable: { title: string; type: string };
+  deliverable: { title: string; slug: string; type: string };
   expiresAt: string | null;
   redeemCount: number;
   maxRedeems: number | null;
@@ -204,6 +214,7 @@ export async function loadGrant(token: string): Promise<GrantPayload | null> {
   const display = getProductDisplayInfo(grant.deliverable.product);
   return {
     token: grant.token,
+    email: grant.email,
     status,
     method: cfg?.method ?? "EXTERNAL_LINK",
     product: {
@@ -212,6 +223,7 @@ export async function loadGrant(token: string): Promise<GrantPayload | null> {
     },
     deliverable: {
       title: grant.deliverable.title,
+      slug: grant.deliverable.slug,
       type: grant.deliverable.type,
     },
     expiresAt: grant.expiresAt?.toISOString() ?? null,
@@ -219,7 +231,7 @@ export async function loadGrant(token: string): Promise<GrantPayload | null> {
     maxRedeems: grant.maxRedeems,
     emailSubject: cfg?.emailSubject ?? null,
     emailBody: cfg?.emailBody ?? null,
-    url: cfg?.method === "EXTERNAL_LINK" ? cfg?.externalUrl ?? null : null,
+    url: cfg?.method === "EXTERNAL_LINK" ? (cfg?.externalUrl ?? null) : null,
     repo:
       cfg?.method === "GITHUB_INVITE" && cfg.repoOwner && cfg.repoName
         ? { owner: cfg.repoOwner, name: cfg.repoName }
@@ -272,7 +284,10 @@ export async function redeemGrant(token: string): Promise<{
   });
   if (!grant) return { url: null, status: "REVOKED", reason: "Not found" };
 
-  if (grant.status === "EXPIRED" || (grant.expiresAt && grant.expiresAt < new Date())) {
+  if (
+    grant.status === "EXPIRED" ||
+    (grant.expiresAt && grant.expiresAt < new Date())
+  ) {
     if (grant.status !== "EXPIRED") {
       await db.deliveryGrant.update({
         where: { id: grant.id },
@@ -284,10 +299,7 @@ export async function redeemGrant(token: string): Promise<{
   if (grant.status === "REVOKED") {
     return { url: null, status: "REVOKED", reason: "Grant revoked" };
   }
-  if (
-    grant.maxRedeems != null &&
-    grant.redeemCount >= grant.maxRedeems
-  ) {
+  if (grant.maxRedeems != null && grant.redeemCount >= grant.maxRedeems) {
     return { url: null, status: "REDEEMED", reason: "Redeem limit reached" };
   }
 
@@ -296,7 +308,10 @@ export async function redeemGrant(token: string): Promise<{
   let url: string | null = null;
   if (cfg?.method === "EXTERNAL_LINK") {
     url = cfg.externalUrl;
-  } else if (cfg?.method === "EMAIL_LINK" || cfg?.method === "DIRECT_DOWNLOAD") {
+  } else if (
+    cfg?.method === "EMAIL_LINK" ||
+    cfg?.method === "DIRECT_DOWNLOAD"
+  ) {
     if (guide && cfg.method === "DIRECT_DOWNLOAD") {
       url = getGuideGrantDownloadUrl(token, "pdf");
     } else if (cfg.assetUrl) {
@@ -317,8 +332,7 @@ export async function redeemGrant(token: string): Promise<{
   }
 
   const newCount = grant.redeemCount + 1;
-  const reachedMax =
-    grant.maxRedeems != null && newCount >= grant.maxRedeems;
+  const reachedMax = grant.maxRedeems != null && newCount >= grant.maxRedeems;
 
   await db.deliveryGrant.update({
     where: { id: grant.id },
@@ -349,7 +363,10 @@ export async function redeemGitHubInvite(
     include: { deliverable: { include: { delivery: true } } },
   });
   if (!grant) return { url: null, status: "REVOKED", reason: "Not found" };
-  if (grant.status === "EXPIRED" || (grant.expiresAt && grant.expiresAt < new Date())) {
+  if (
+    grant.status === "EXPIRED" ||
+    (grant.expiresAt && grant.expiresAt < new Date())
+  ) {
     return { url: null, status: "EXPIRED", reason: "Grant expired" };
   }
   if (grant.status === "REVOKED") {
@@ -360,8 +377,15 @@ export async function redeemGitHubInvite(
   if (cfg?.method !== "GITHUB_INVITE" || !cfg.repoOwner || !cfg.repoName) {
     return { url: null, status: grant.status, reason: "Not a GitHub grant" };
   }
-  if (!githubLogin || !/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i.test(githubLogin)) {
-    return { url: null, status: grant.status, reason: "Invalid GitHub username" };
+  if (
+    !githubLogin ||
+    !/^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i.test(githubLogin)
+  ) {
+    return {
+      url: null,
+      status: grant.status,
+      reason: "Invalid GitHub username",
+    };
   }
 
   let inviteUrl: string;

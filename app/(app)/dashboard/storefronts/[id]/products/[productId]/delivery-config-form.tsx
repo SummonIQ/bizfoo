@@ -28,7 +28,7 @@ const METHOD_LABEL: Record<DeliveryMethod, string> = {
   EMAIL_LINK: "Email a time-limited link",
   GITHUB_INVITE: "Invite to private GitHub repo",
   DIRECT_DOWNLOAD: "Direct download (auth-gated by storefront)",
-  EXTERNAL_LINK: "Hand off an external link",
+  EXTERNAL_LINK: "Hand off an external/private app link",
 };
 
 export function DeliveryConfigForm({
@@ -55,9 +55,10 @@ export function DeliveryConfigForm({
       method,
       assetUrl: (data.get("assetUrl") as string) || null,
       ttlMinutes: Number(data.get("ttlMinutes")) || 1440,
-      maxRedeems: Number(data.get("maxRedeems")) > 0
-        ? Number(data.get("maxRedeems"))
-        : null,
+      maxRedeems:
+        Number(data.get("maxRedeems")) > 0
+          ? Number(data.get("maxRedeems"))
+          : null,
       repoOwner: (data.get("repoOwner") as string) || null,
       repoName: (data.get("repoName") as string) || null,
       externalUrl: (data.get("externalUrl") as string) || null,
@@ -106,9 +107,15 @@ export function DeliveryConfigForm({
               className="h-10 rounded-lg border border-border bg-background px-3 text-sm"
             >
               <option value="EMAIL_LINK">{METHOD_LABEL.EMAIL_LINK}</option>
-              <option value="GITHUB_INVITE">{METHOD_LABEL.GITHUB_INVITE}</option>
-              <option value="DIRECT_DOWNLOAD">{METHOD_LABEL.DIRECT_DOWNLOAD}</option>
-              <option value="EXTERNAL_LINK">{METHOD_LABEL.EXTERNAL_LINK}</option>
+              <option value="GITHUB_INVITE">
+                {METHOD_LABEL.GITHUB_INVITE}
+              </option>
+              <option value="DIRECT_DOWNLOAD">
+                {METHOD_LABEL.DIRECT_DOWNLOAD}
+              </option>
+              <option value="EXTERNAL_LINK">
+                {METHOD_LABEL.EXTERNAL_LINK}
+              </option>
             </select>
           </Field>
 
@@ -173,12 +180,12 @@ export function DeliveryConfigForm({
           )}
 
           {method === "EXTERNAL_LINK" && (
-            <Field label="External URL">
+            <Field label="External/private app URL">
               <Input
                 name="externalUrl"
                 type="url"
                 defaultValue={initial?.externalUrl ?? ""}
-                placeholder="https://notion.so/..."
+                placeholder="https://tech-lead-toolkit.summoniq.com"
               />
             </Field>
           )}

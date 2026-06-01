@@ -20,13 +20,19 @@ export async function GET(
 
   const storefront = await getStorefrontByPublicKey(req);
   if (!storefront || storefront.slug !== slug) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers },
+    );
   }
 
   const url = new URL(req.url);
   const email = url.searchParams.get("email");
   if (!email) {
-    return NextResponse.json({ error: "email query param required" }, { status: 400, headers });
+    return NextResponse.json(
+      { error: "email query param required" },
+      { status: 400, headers },
+    );
   }
 
   const orders = await db.order.findMany({
@@ -35,7 +41,9 @@ export async function GET(
     include: {
       items: {
         include: {
-          product: { select: { slug: true, name: true, tagline: true, category: true } },
+          product: {
+            select: { slug: true, name: true, tagline: true, category: true },
+          },
         },
       },
       grants: {
@@ -43,7 +51,7 @@ export async function GET(
           deliverable: {
             include: {
               product: { select: { slug: true, name: true } },
-              delivery: { select: { method: true } },
+              delivery: { select: { method: true, externalUrl: true } },
             },
           },
         },
@@ -74,6 +82,11 @@ export async function GET(
           productSlug: g.deliverable.product.slug,
           productName: g.deliverable.product.name,
           deliverableTitle: g.deliverable.title,
+          deliverableSlug: g.deliverable.slug,
+          url:
+            g.deliverable.delivery?.method === "EXTERNAL_LINK"
+              ? g.deliverable.delivery.externalUrl
+              : null,
           expiresAt: g.expiresAt,
           redeemedAt: g.redeemedAt,
         })),
