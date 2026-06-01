@@ -1,3 +1,20 @@
+<!-- SUMMONIQ-OSS-HEADER:START -->
+<div align="center">
+
+  <img src="public/logo.svg" alt="Bizfoo logo" width="112">
+
+  <h1>Bizfoo</h1>
+  <p>Storefronts that ship in an afternoon. Live: https://bizfoo.com</p>
+
+  <p>
+    <a href="https://github.com/SummonIQ/bizfoo"><img alt="Repository" src="https://img.shields.io/badge/github-SummonIQ%2Fbizfoo-24292f?logo=github"></a>
+    <a href="https://unlicense.org/"><img alt="License: Unlicense" src="https://img.shields.io/badge/license-Unlicense-blue.svg"></a>
+  </p>
+
+</div>
+
+---
+<!-- SUMMONIQ-OSS-HEADER:END -->
 # bizfoo
 
 Storefronts that ship in an afternoon. Live: https://bizfoo.com
