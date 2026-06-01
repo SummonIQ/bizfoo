@@ -62,6 +62,8 @@ const STOREFRONT = {
     "Templates, boilerplates, integrations, and design systems we built while shipping client work.",
 };
 
+const RETIRED_PRODUCT_SLUGS = ["tech-lead-toolkit-app"];
+
 const PRODUCTS: SeedProduct[] = [
   {
     slug: "nextjs-saas-starter",
@@ -596,12 +598,12 @@ const PRODUCTS: SeedProduct[] = [
     slug: "tech-lead-guide",
     name: "Tech Lead Guide",
     tagline:
-      "The first-90-days playbook for new tech leads and engineering managers.",
+      "The first-90-days playbook for new tech leads, bundled with private Tech Lead Toolkit app access.",
     description:
-      "A practical guide with the rituals, templates, and operating cadence you need when you inherit a team: first-week setup, 1:1s, ADRs, RFCs, planning, project reviews, post-mortems, feedback, and quarterly planning. Ships as MDX plus copy-pasteable Notion docs.",
+      "A practical guide with the rituals, templates, and operating cadence you need when you inherit a team: first-week setup, 1:1s, ADRs, RFCs, planning, project reviews, post-mortems, feedback, and quarterly planning. Includes private Tech Lead Toolkit app access for running the system after checkout, plus MDX and copy-pasteable Notion docs.",
     category: "guides",
     badge: "new",
-    stack: ["MDX", "Notion"],
+    stack: ["MDX", "Notion", "Tech Lead Toolkit app"],
     deliverables: [
       {
         title: "Tech Lead Toolkit private app",
@@ -611,7 +613,7 @@ const PRODUCTS: SeedProduct[] = [
         access: "BUYERS_ONLY",
         url: "https://tech-lead-toolkit.summoniq.com",
         notes:
-          "Private app access for buyers. SummonIQ store exchanges the buyer grant for a signed app handoff.",
+          "Included private app access for Tech Lead Guide buyers. SummonIQ store exchanges the buyer grant for a signed app handoff.",
         delivery: {
           method: "EXTERNAL_LINK",
           externalUrl: "https://tech-lead-toolkit.summoniq.com",
@@ -619,7 +621,7 @@ const PRODUCTS: SeedProduct[] = [
           maxRedeems: null,
           emailSubject: "Your Tech Lead Toolkit app access is ready",
           emailBody:
-            "Open your private app from the SummonIQ purchases page. The app sign-in is linked to your SummonIQ buyer account.",
+            "Tech Lead Toolkit app access is included with your Tech Lead Guide purchase. Open it from the SummonIQ purchases page; sign-in is linked to your SummonIQ buyer account.",
         },
       },
     ],
@@ -995,46 +997,6 @@ const PRODUCTS: SeedProduct[] = [
     prices: [{ amount: 149900 }],
   },
   {
-    slug: "tech-lead-toolkit-app",
-    name: "Tech Lead Toolkit — Engineering OS",
-    tagline:
-      "The engineering leader's operating system: capacity, mentorship, 1:1s, metrics — all in one dashboard.",
-    description:
-      "A full SaaS for engineering managers and tech leads. Team directory, capacity planning, mentor matching, 1:1 notes with templates, decision logs, project delivery dashboards, and tech-debt tracking. Ships with Better Auth (incl. 2FA), Stripe checkout + customer portal, Vercel Analytics + Speed Insights + Sentry, Pusher real-time, and Vercel Blob. Rebrand the config, deploy to Vercel, charge customers.",
-    category: "apps",
-    badge: "new",
-    stack: [
-      "Next.js 16",
-      "Better Auth",
-      "Stripe",
-      "Vercel Analytics",
-      "Sentry",
-      "Pusher",
-    ],
-    deliverables: [
-      {
-        title: "Tech Lead Toolkit private app",
-        slug: "tech-lead-toolkit-private-app",
-        type: "LINK",
-        status: "READY",
-        access: "BUYERS_ONLY",
-        url: "https://tech-lead-toolkit.summoniq.com",
-        notes:
-          "Private app access for buyers. SummonIQ store exchanges the buyer grant for a signed app handoff.",
-        delivery: {
-          method: "EXTERNAL_LINK",
-          externalUrl: "https://tech-lead-toolkit.summoniq.com",
-          ttlMinutes: 0,
-          maxRedeems: null,
-          emailSubject: "Your Tech Lead Toolkit app access is ready",
-          emailBody:
-            "Open your private app from the SummonIQ purchases page. The app sign-in is linked to your SummonIQ buyer account.",
-        },
-      },
-    ],
-    prices: [{ amount: 119900 }],
-  },
-  {
     slug: "agency-dashboard-app",
     name: "Agency Dashboard",
     tagline:
@@ -1345,6 +1307,17 @@ async function main() {
         console.log(`    • deliverable ${deliverable.slug}`);
       }
     }
+  }
+
+  if (RETIRED_PRODUCT_SLUGS.length) {
+    const retired = await db.product.updateMany({
+      where: {
+        storefrontId: storefront.id,
+        slug: { in: RETIRED_PRODUCT_SLUGS },
+      },
+      data: { active: false },
+    });
+    console.log(`  - retired ${retired.count} bundled product listing(s)`);
   }
 
   if (process.env.SEED_SYNC_STRIPE === "true") {
